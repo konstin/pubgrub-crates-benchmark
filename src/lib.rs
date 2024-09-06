@@ -870,60 +870,130 @@ impl<'c> DependencyProvider for Index<'c> {
     }
 }
 
+#[derive(clap::ValueEnum, Clone, Debug, Copy)]
+pub enum Mode {
+    All,
+    Pub,
+    Cargo,
+    PubLock,
+    CargoLock,
+}
+
+impl Mode {
+    fn build_pub(&self) -> bool {
+        match self {
+            Mode::All => true,
+            Mode::Pub => true,
+            Mode::Cargo => false,
+            Mode::PubLock => false,
+            Mode::CargoLock => true,
+        }
+    }
+
+    fn build_cargo(&self) -> bool {
+        match self {
+            Mode::All => true,
+            Mode::Pub => false,
+            Mode::Cargo => true,
+            Mode::PubLock => true,
+            Mode::CargoLock => false,
+        }
+    }
+
+    fn build_pub_lock(&self) -> bool {
+        match self {
+            Mode::All => true,
+            Mode::Pub => false,
+            Mode::Cargo => false,
+            Mode::PubLock => true,
+            Mode::CargoLock => false,
+        }
+    }
+
+    fn build_cargo_lock(&self) -> bool {
+        match self {
+            Mode::All => true,
+            Mode::Pub => false,
+            Mode::Cargo => false,
+            Mode::PubLock => false,
+            Mode::CargoLock => true,
+        }
+    }
+}
+
 pub fn process_carte_version<'c>(
     dp: &mut Index<'c>,
     crt: InternedString,
     ver: semver::Version,
+    mode: Mode,
 ) -> OutPutSummery {
     let root = new_bucket(crt.as_str(), (&ver).into(), true);
     dp.reset();
-    let res = resolve(dp, root.clone(), (&ver).clone());
-    let pub_cyclic_package_dependency = if let Ok(map) = res.as_ref() {
-        dp.check_cycles(root.clone(), map)
-    } else {
-        false
-    };
-    let duration = dp.duration();
-    let should_cancel_call_count = dp.should_cancel_call_count();
-    let get_dependencies_call_count = dp.pubgrub_dependencies.borrow().len();
-    match res.as_ref() {
-        Ok(map) => {
-            if !dp.check(root.clone(), &map) {
+    let mut pub_cyclic_package_dependency = None;
+    let mut cyclic_package_dependency = false;
+    let mut res = None;
+    let mut pub_time = 0.0;
+    let mut should_cancel_call_count = 0;
+    let mut get_dependencies_call_count = 0;
+    if mode.build_pub() {
+        res = Some(resolve(dp, root.clone(), (&ver).clone()));
+        cyclic_package_dependency = if let Some(Ok(map)) = res.as_ref() {
+            dp.check_cycles(root.clone(), map)
+        } else {
+            false
+        };
+        pub_cyclic_package_dependency = Some(cyclic_package_dependency);
+        pub_time = dp.duration();
+        should_cancel_call_count = dp.should_cancel_call_count();
+        get_dependencies_call_count = dp.pubgrub_dependencies.borrow().len();
+        match res.as_ref().unwrap().as_ref() {
+            Ok(map) => {
+                if !dp.check(root.clone(), &map) {
+                    dp.make_index_ron_file();
+                    panic!("failed check");
+                }
+            }
+            Err(PubGrubError::NoSolution(_derivation)) => {}
+            Err(e) => {
                 dp.make_index_ron_file();
-                panic!("failed check");
+                dbg!(e);
             }
         }
-        Err(PubGrubError::NoSolution(_derivation)) => {}
-        Err(e) => {
+        if pub_time > TIME_MAKE_FILE {
             dp.make_index_ron_file();
-            dbg!(e);
         }
     }
-    if duration > TIME_MAKE_FILE {
-        dp.make_index_ron_file();
-    }
+    let mut cargo_out = None;
+    let mut cargo_time = 0.0;
+    if mode.build_cargo() {
+        dp.reset_time();
+        cargo_out = Some(cargo_resolver::resolve(crt, &ver, dp));
+        cargo_time = dp.duration();
+        cyclic_package_dependency = &cargo_out
+            .as_ref()
+            .unwrap()
+            .as_ref()
+            .map_err(|e| e.to_string().starts_with("cyclic package dependency"))
+            == &Err(true);
+        if let Some(pub_cyclic_package_dependency) = pub_cyclic_package_dependency {
+            if cyclic_package_dependency != pub_cyclic_package_dependency {
+                dp.make_index_ron_file();
+                println!("failed to cyclic_package_dependency {root:?}");
+            }
 
-    dp.reset_time();
-    let cargo_out = cargo_resolver::resolve(crt, &ver, dp);
-    let cargo_duration = dp.duration();
-
-    let cyclic_package_dependency = &cargo_out
-        .as_ref()
-        .map_err(|e| e.to_string().starts_with("cyclic package dependency"))
-        == &Err(true);
-
-    if cyclic_package_dependency != pub_cyclic_package_dependency {
-        dp.make_index_ron_file();
-        println!("failed to cyclic_package_dependency {root:?}");
-    }
-
-    if !cyclic_package_dependency && res.is_ok() != cargo_out.is_ok() {
-        dp.make_index_ron_file();
-        println!("failed to match cargo {root:?}");
+            if !cyclic_package_dependency
+                && res.as_ref().unwrap().is_ok() != cargo_out.as_ref().unwrap().is_ok()
+            {
+                dp.make_index_ron_file();
+                println!("failed to match cargo {root:?}");
+            }
+        }
     }
     let mut cargo_check_pub_lock_time = 0.0;
-    if res.is_ok() {
+    if mode.build_cargo_lock() && res.as_ref().unwrap().is_ok() {
         dp.past_result = res
+            .as_ref()
+            .unwrap()
             .as_ref()
             .map(|map| {
                 let mut results: HashMap<InternedString, BTreeSet<semver::Version>> =
@@ -955,8 +1025,10 @@ pub fn process_carte_version<'c>(
     }
 
     let mut pub_check_cargo_lock_time = 0.0;
-    if cargo_out.is_ok() {
+    if mode.build_pub_lock() && cargo_out.as_ref().unwrap().is_ok() {
         dp.past_result = cargo_out
+            .as_ref()
+            .unwrap()
             .as_ref()
             .map(|map| {
                 let mut results: HashMap<InternedString, BTreeSet<semver::Version>> =
@@ -980,21 +1052,36 @@ pub fn process_carte_version<'c>(
         }
     }
 
+    let pubgrub_deps = if let Some(Ok(map)) = &res {
+        map.len()
+    } else {
+        0
+    };
+
+    let deps = if let Some(Ok(map)) = &res {
+        map.iter().filter(|(v, _)| v.is_real()).count()
+    } else {
+        0
+    };
+
+    let cargo_deps = if let Some(Ok(map)) = &cargo_out {
+        map.len()
+    } else {
+        0
+    };
+
     OutPutSummery {
         name: crt,
         ver,
-        time: duration,
-        succeeded: res.is_ok(),
+        time: pub_time,
+        succeeded: matches!(&res, Some(Ok(_))),
         should_cancel_call_count,
         get_dependencies_call_count,
-        pubgrub_deps: res.as_ref().map(|r| r.len()).unwrap_or(0),
-        deps: res
-            .as_ref()
-            .map(|r| r.iter().filter(|(v, _)| v.is_real()).count())
-            .unwrap_or(0),
-        cargo_time: cargo_duration,
+        pubgrub_deps,
+        deps,
+        cargo_time,
         cyclic_package_dependency,
-        cargo_deps: cargo_out.as_ref().map(|r| r.iter().count()).unwrap_or(0),
+        cargo_deps,
         cargo_check_pub_lock_time,
         pub_check_cargo_lock_time,
     }

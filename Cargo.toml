@@ -22,3 +22,4 @@ tikv-jemallocator = "0.5"
 anyhow = "1.0.86"
 indexmap = "2.2.6"
 either = "1.13.0"
+clap = { version = "4.5.17", features = ["derive"] }

@@ -1,16 +1,37 @@
 use std::{sync::mpsc, thread::spawn, time::Instant};
 
 use benchmark_from_crates::{
-    index_data, process_carte_version, read_index::read_index, Index, OutPutSummery,
+    index_data, process_carte_version, read_index::read_index, Index, Mode, OutPutSummery,
 };
 use cargo::core::Summary;
+use clap::Parser;
 use indicatif::{ParallelProgressIterator as _, ProgressBar, ProgressFinish, ProgressStyle};
 use rayon::iter::{IntoParallelRefIterator as _, ParallelIterator as _};
 
+#[derive(Parser, Debug)]
+#[command(about, long_about = None)]
+struct Args {
+    /// Dont filter out core elements of the Solana ecosystem
+    #[clap(long)]
+    with_solana: bool,
+
+    #[arg(long, value_enum, default_value_t = Mode::All)]
+    mode: Mode,
+}
+
 fn main() {
-    println!("Running on {} rayon threads.", rayon::current_num_threads());
-    let create_filter = |name: &str| !name.contains("solana");
-    println!("!!!!!!!!!! Excluding Solana Crates !!!!!!!!!!");
+    let args = Args::parse();
+    println!(
+        "Running in mode {:?} on {} rayon threads.",
+        &args.mode,
+        rayon::current_num_threads()
+    );
+    let create_filter = if args.with_solana {
+        |_name: &str| true
+    } else {
+        println!("!!!!!!!!!! Excluding Solana Crates !!!!!!!!!!");
+        |name: &str| !name.contains("solana")
+    };
     let version_filter =
         |version: &index_data::Version| !version.yanked && Summary::try_from(version).is_ok();
     println!("!!!!!!!!!! Excluding Yanked and Non Cargo Summary Versions !!!!!!!!!!");
@@ -55,7 +76,12 @@ fn main() {
         .flat_map(|(c, v)| v.par_iter().map(|(v, _)| (c.clone(), v)))
         .progress_with(style)
         .map(|(crt, ver)| {
-            process_carte_version(&mut Index::new(&data, &cargo_crates), crt, ver.clone())
+            process_carte_version(
+                &mut Index::new(&data, &cargo_crates),
+                crt,
+                ver.clone(),
+                args.mode,
+            )
         })
         .for_each(move |csv_line| {
             let _ = tx.send(csv_line);
@@ -64,7 +90,13 @@ fn main() {
     let (pub_cpu_time, cargo_cpu_time, cargo_pub_lock_cpu_time, pub_cargo_lock_cpu_time, wall_time) =
         file_handle.join().unwrap();
     println!("!!!!!!!!!! Timeings !!!!!!!!!!");
-    let p = |n: &str, t: f32| println!("{n:>20} time: {:>8.2}s == {:>6.2}min", t, t / 60.0);
+    let p = |n: &str, t: f32| {
+        if t > 0.0 {
+            println!("{n:>20} time: {:>8.2}s == {:>6.2}min", t, t / 60.0)
+        } else {
+            println!("{n:>20} time: skipped")
+        }
+    };
     p("Pub CPU", pub_cpu_time);
     p("Cargo CPU", cargo_cpu_time);
     p("Cargo check lock CPU", cargo_pub_lock_cpu_time);
