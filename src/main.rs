@@ -63,26 +63,11 @@ fn main() {
 
     let (pub_cpu_time, cargo_cpu_time, cargo_pub_lock_cpu_time, pub_cargo_lock_cpu_time, wall_time) =
         file_handle.join().unwrap();
-    let p = |t: f32| {
-        println!(
-            " time: {:.2}s == {:.2}min == {:.2}hr",
-            t,
-            t / 60.0,
-            t / 3600.0
-        )
-    };
-    print!("Pub CPU");
-    p(pub_cpu_time);
-
-    print!("Cargo CPU");
-    p(cargo_cpu_time);
-
-    print!("Cargo check lock CPU");
-    p(cargo_pub_lock_cpu_time);
-
-    print!("Pub check lock CPU");
-    p(pub_cargo_lock_cpu_time);
-
-    print!("Wall");
-    p(wall_time);
+    println!("!!!!!!!!!! Timeings !!!!!!!!!!");
+    let p = |n: &str, t: f32| println!("{n:>20} time: {:>8.2}s == {:>6.2}min", t, t / 60.0);
+    p("Pub CPU", pub_cpu_time);
+    p("Cargo CPU", cargo_cpu_time);
+    p("Cargo check lock CPU", cargo_pub_lock_cpu_time);
+    p("Pub check lock CPU", pub_cargo_lock_cpu_time);
+    p("Wall", wall_time);
 }
