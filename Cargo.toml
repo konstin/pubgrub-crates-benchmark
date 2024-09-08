@@ -18,8 +18,10 @@ pubgrub = { git="https://github.com/pubgrub-rs/pubgrub", branch="dev", features=
 itertools = "0.12.1"
 csv = "1.3.0"
 cargo = {git="https://github.com/Eh2406/cargo.git", branch="wrap_is_not_cheap"}
-tikv-jemallocator = "0.5"
 anyhow = "1.0.86"
 indexmap = "2.2.6"
 either = "1.13.0"
 clap = { version = "4.5.17", features = ["derive"] }
+
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemallocator = "0.5"

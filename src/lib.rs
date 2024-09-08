@@ -37,6 +37,7 @@ mod tests;
 #[cfg(test)]
 use read_index::read_test_file;
 
+#[cfg(not(target_env = "msvc"))]
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 

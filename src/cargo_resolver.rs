@@ -123,8 +123,15 @@ impl TryFrom<&crate::index_data::Version> for Summary {
 
 fn registry_local() -> SourceId {
     static SOME_LOCAL_PATH: OnceLock<SourceId> = OnceLock::new();
-    *SOME_LOCAL_PATH
-        .get_or_init(|| SourceId::for_path(std::path::Path::new("/some-local-path")).unwrap())
+    *SOME_LOCAL_PATH.get_or_init(|| {
+        SourceId::for_path(std::path::Path::new(if cfg!(windows) {
+            // why does this have to exist only on windows?
+            "C:\\"
+        } else {
+            "/some-local-path"
+        }))
+        .unwrap()
+    })
 }
 
 fn registry_loc() -> SourceId {

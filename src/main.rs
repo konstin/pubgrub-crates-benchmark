@@ -15,12 +15,18 @@ struct Args {
     #[clap(long)]
     with_solana: bool,
 
-    #[arg(long, value_enum, default_value_t = Mode::All)]
+    #[arg(long, short, value_enum, default_value_t = Mode::All)]
     mode: Mode,
+
+    /// Sets the number of threads to be used in the rayon threadpool.
+    #[clap(long, short, default_value_t = 0)]
+    threads: usize,
 }
 
 fn main() {
     let args = Args::parse();
+    rayon::ThreadPoolBuilder::new().num_threads(args.threads).build_global().unwrap();
+
     println!(
         "Running in mode {:?} on {} rayon threads.",
         &args.mode,
