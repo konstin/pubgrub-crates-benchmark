@@ -50,8 +50,7 @@ const TIME_CUT_OFF: f32 = TIME_MAKE_FILE * 4.0;
 
 #[derive(Clone)]
 pub struct Index<'c> {
-    crates: &'c HashMap<InternedString, BTreeMap<semver::Version, index_data::Version>>,
-    cargo_crates: &'c HashMap<InternedString, BTreeMap<semver::Version, Summary>>,
+    crates: &'c HashMap<InternedString, BTreeMap<semver::Version, (index_data::Version, Summary)>>,
     past_result: Option<HashMap<InternedString, BTreeSet<semver::Version>>>,
     dependencies: RefCell<HashSet<(InternedString, semver::Version)>>,
     pubgrub_dependencies: RefCell<HashSet<(Rc<Names<'c>>, semver::Version)>>,
@@ -61,12 +60,13 @@ pub struct Index<'c> {
 
 impl<'c> Index<'c> {
     pub fn new(
-        crates: &'c HashMap<InternedString, BTreeMap<semver::Version, index_data::Version>>,
-        cargo_crates: &'c HashMap<InternedString, BTreeMap<semver::Version, Summary>>,
+        crates: &'c HashMap<
+            InternedString,
+            BTreeMap<semver::Version, (index_data::Version, Summary)>,
+        >,
     ) -> Self {
         Self {
             crates,
-            cargo_crates,
             past_result: None,
             pubgrub_dependencies: Default::default(),
             dependencies: Default::default(),
@@ -148,7 +148,7 @@ impl<'c> Index<'c> {
 
         name_vers
             .into_iter()
-            .map(|(n, version)| self.crates[n][version].clone())
+            .map(|(n, version)| self.crates[n][version].0.clone())
             .collect()
     }
 
@@ -201,7 +201,7 @@ impl<'c> Index<'c> {
         if let Some(past) = &self.past_result {
             past.get(name)?.get(ver)?;
         }
-        self.crates.get(name)?.get(ver)
+        self.crates.get(name)?.get(ver).map(|v| &v.0)
     }
 
     fn only_one_compatibility_range_in_data(

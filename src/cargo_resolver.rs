@@ -21,10 +21,10 @@ impl<'a> Registry for crate::Index<'a> {
         kind: QueryKind,
         f: &mut dyn FnMut(IndexSummary),
     ) -> Poll<CargoResult<()>> {
-        if let Some(by_name) = self.cargo_crates.get(&dep.package_name()) {
+        if let Some(by_name) = self.crates.get(&dep.package_name()) {
             if let Some(past_result) = &self.past_result {
                 for past_ver in past_result.get(&dep.package_name()).into_iter().flatten() {
-                    if let Some(summary) = by_name.get(past_ver) {
+                    if let Some((_, summary)) = by_name.get(past_ver) {
                         if dep.matches(&summary) {
                             self.dependencies
                                 .borrow_mut()
@@ -34,7 +34,7 @@ impl<'a> Registry for crate::Index<'a> {
                     }
                 }
             } else {
-                for summary in by_name.values() {
+                for (_, summary) in by_name.values() {
                     let matched = match kind {
                         QueryKind::Exact => dep.matches(&summary),
                         QueryKind::Alternatives => true,
@@ -70,10 +70,10 @@ pub fn resolve<'c>(
     ver: &semver::Version,
     dp: &mut crate::Index<'c>,
 ) -> CargoResult<Resolve> {
-    let Some(pack) = dp.cargo_crates.get(&name) else {
+    let Some(pack) = dp.crates.get(&name) else {
         bail!("No package found named '{name}'");
     };
-    let Some(summary) = pack.get(ver).cloned() else {
+    let Some((_, summary)) = pack.get(ver).cloned() else {
         bail!("No version found for package '{name}@{ver}'");
     };
     let new_id = summary.package_id().with_source_id(registry_local());

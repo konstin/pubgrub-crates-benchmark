@@ -10,10 +10,7 @@ fn case_from_file_name(file_name: &str) -> (&str, semver::Version) {
 
 fn crates_data_from_file<P: AsRef<Path>>(
     path: P,
-) -> (
-    HashMap<InternedString, BTreeMap<semver::Version, index_data::Version>>,
-    HashMap<InternedString, BTreeMap<semver::Version, Summary>>,
-) {
+) -> HashMap<InternedString, BTreeMap<semver::Version, (index_data::Version, Summary)>> {
     let data = std::fs::read_to_string(path).unwrap();
     let data: Vec<index_data::Version> = ron::de::from_str(&data).unwrap();
     read_test_file(data)
@@ -63,7 +60,8 @@ fn check<'c>(dp: &mut Index<'c>, root: Rc<Names<'c>>, ver: &semver::Version) -> 
         dp.past_result = res
             .as_ref()
             .map(|map| {
-                let mut results: HashMap<InternedString, BTreeSet<semver::Version>> = HashMap::new();
+                let mut results: HashMap<InternedString, BTreeSet<semver::Version>> =
+                    HashMap::new();
                 for (k, v) in map.iter() {
                     if k.is_real() {
                         results
@@ -91,7 +89,8 @@ fn check<'c>(dp: &mut Index<'c>, root: Rc<Names<'c>>, ver: &semver::Version) -> 
         dp.past_result = cargo_out
             .as_ref()
             .map(|map| {
-                let mut results: HashMap<InternedString, BTreeSet<semver::Version>> = HashMap::new();
+                let mut results: HashMap<InternedString, BTreeSet<semver::Version>> =
+                    HashMap::new();
                 for v in map.iter() {
                     results
                         .entry(v.name())
@@ -147,8 +146,8 @@ fn named_from_files_pass_tests() {
         let (name, ver) = case_from_file_name(&file_name);
         eprintln!("Running: {name} @ {ver}");
         let start_time = std::time::Instant::now();
-        let (crates, cargo_crates) = crates_data_from_file(&case);
-        let mut dp = Index::new(&crates, &cargo_crates);
+        let crates = crates_data_from_file(&case);
+        let mut dp = Index::new(&crates);
         let root = new_bucket(&name, (&ver).into(), true);
         if !check(&mut dp, root, &ver) {
             dp.make_index_ron_file();
@@ -178,8 +177,8 @@ fn named_from_files_pass_without_vers() {
                 let len = data.len();
                 let i = (i + offset) % len;
                 let removed = data.swap_remove(i);
-                let (crates, cargo_data) = read_test_file(data.iter().cloned());
-                let mut dp = Index::new(&crates, &cargo_data);
+                let crates = read_test_file(data.iter().cloned());
+                let mut dp = Index::new(&crates);
                 if !check(&mut dp, root.clone(), &ver) {
                     data = dp.make_index_ron_data();
                     offset = i;
@@ -188,8 +187,8 @@ fn named_from_files_pass_without_vers() {
                 };
                 if let Some(without_features) = removed.clone().without_features() {
                     data.push(without_features);
-                    let (crates, cargo_data) = read_test_file(data.iter().cloned());
-                    let mut dp = Index::new(&crates, &cargo_data);
+                    let crates = read_test_file(data.iter().cloned());
+                    let mut dp = Index::new(&crates);
                     if !check(&mut dp, root.clone(), &ver) {
                         data = dp.make_index_ron_data();
                         offset = i;
@@ -202,8 +201,8 @@ fn named_from_files_pass_without_vers() {
                     if let Some(without_features) = removed.clone().without_a_feature(f) {
                         if TryInto::<Summary>::try_into(&without_features).is_ok() {
                             data.push(without_features);
-                            let (crates, cargo_data) = read_test_file(data.iter().cloned());
-                            let mut dp = Index::new(&crates, &cargo_data);
+                            let crates = read_test_file(data.iter().cloned());
+                            let mut dp = Index::new(&crates);
                             if !check(&mut dp, root.clone(), &ver) {
                                 data = dp.make_index_ron_data();
                                 offset = i;
@@ -217,8 +216,8 @@ fn named_from_files_pass_without_vers() {
                 if let Some(without_deps) = removed.clone().without_deps() {
                     if TryInto::<Summary>::try_into(&without_deps).is_ok() {
                         data.push(without_deps);
-                        let (crates, cargo_data) = read_test_file(data.iter().cloned());
-                        let mut dp = Index::new(&crates, &cargo_data);
+                        let crates = read_test_file(data.iter().cloned());
+                        let mut dp = Index::new(&crates);
                         if !check(&mut dp, root.clone(), &ver) {
                             data = dp.make_index_ron_data();
                             offset = i;
@@ -232,8 +231,8 @@ fn named_from_files_pass_without_vers() {
                     if let Some(without_deps) = removed.clone().without_a_dep(d) {
                         if TryInto::<Summary>::try_into(&without_deps).is_ok() {
                             data.push(without_deps);
-                            let (crates, cargo_data) = read_test_file(data.iter().cloned());
-                            let mut dp = Index::new(&crates, &cargo_data);
+                            let crates = read_test_file(data.iter().cloned());
+                            let mut dp = Index::new(&crates);
                             if !check(&mut dp, root.clone(), &ver) {
                                 data = dp.make_index_ron_data();
                                 offset = i;
@@ -247,8 +246,8 @@ fn named_from_files_pass_without_vers() {
             }
             break;
         }
-        let (crates, cargo_data) = read_test_file(data);
-        let mut dp = Index::new(&crates, &cargo_data);
+        let crates = read_test_file(data);
+        let mut dp = Index::new(&crates);
         if !check(&mut dp, root, &ver) {
             dp.make_index_ron_file();
         };
@@ -266,8 +265,8 @@ fn all_vers_in_files_pass_tests() {
         let file_name = case.file_name().unwrap().to_string_lossy();
         eprintln!("Running: {file_name}");
         let start_time = std::time::Instant::now();
-        let (crates, cargo_crates) = crates_data_from_file(&case);
-        let mut dp = Index::new(&crates, &cargo_crates);
+        let crates = crates_data_from_file(&case);
+        let mut dp = Index::new(&crates);
         for (name, vers) in &crates {
             for ver in vers.keys() {
                 let root = new_bucket(&name, ver.into(), true);

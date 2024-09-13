@@ -3,7 +3,6 @@ use std::{sync::mpsc, thread::spawn, time::Instant};
 use benchmark_from_crates::{
     index_data, process_carte_version, read_index::read_index, Index, Mode, OutPutSummery,
 };
-use cargo::core::Summary;
 use clap::Parser;
 use indicatif::{ParallelProgressIterator as _, ProgressBar, ProgressFinish, ProgressStyle};
 use rayon::iter::{IntoParallelRefIterator as _, ParallelIterator as _};
@@ -25,7 +24,10 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
-    rayon::ThreadPoolBuilder::new().num_threads(args.threads).build_global().unwrap();
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(args.threads)
+        .build_global()
+        .unwrap();
 
     println!(
         "Running in mode {:?} on {} rayon threads.",
@@ -38,14 +40,13 @@ fn main() {
         println!("!!!!!!!!!! Excluding Solana Crates !!!!!!!!!!");
         |name: &str| !name.contains("solana")
     };
-    let version_filter =
-        |version: &index_data::Version| !version.yanked && Summary::try_from(version).is_ok();
-    println!("!!!!!!!!!! Excluding Yanked and Non Cargo Summary Versions !!!!!!!!!!");
+    let version_filter = |version: &index_data::Version| !version.yanked;
+    println!("!!!!!!!!!! Excluding Yanked !!!!!!!!!!");
 
     let index =
         crates_index::GitIndex::with_path("index", "https://github.com/rust-lang/crates.io-index")
             .unwrap();
-    let (data, cargo_crates) = read_index(&index, create_filter, version_filter);
+    let data = read_index(&index, create_filter, version_filter);
 
     let (tx, rx) = mpsc::channel::<OutPutSummery>();
 
@@ -82,12 +83,7 @@ fn main() {
         .flat_map(|(c, v)| v.par_iter().map(|(v, _)| (c.clone(), v)))
         .progress_with(style)
         .map(|(crt, ver)| {
-            process_carte_version(
-                &mut Index::new(&data, &cargo_crates),
-                crt,
-                ver.clone(),
-                args.mode,
-            )
+            process_carte_version(&mut Index::new(&data), crt, ver.clone(), args.mode)
         })
         .for_each(move |csv_line| {
             let _ = tx.send(csv_line);
