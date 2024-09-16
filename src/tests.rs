@@ -10,7 +10,11 @@ fn case_from_file_name(file_name: &str) -> (&str, semver::Version) {
 
 fn crates_data_from_file<P: AsRef<Path>>(
     path: P,
-) -> HashMap<InternedString, BTreeMap<semver::Version, (index_data::Version, Summary)>> {
+) -> HashMap<
+    InternedString,
+    BTreeMap<semver::Version, (index_data::Version, Summary)>,
+    rustc_hash::FxBuildHasher,
+> {
     let data = std::fs::read_to_string(path).unwrap();
     let data: Vec<index_data::Version> = ron::de::from_str(&data).unwrap();
     read_test_file(data)
@@ -60,8 +64,11 @@ fn check<'c>(dp: &mut Index<'c>, root: Rc<Names<'c>>, ver: &semver::Version) -> 
         dp.past_result = res
             .as_ref()
             .map(|map| {
-                let mut results: HashMap<InternedString, BTreeSet<semver::Version>> =
-                    HashMap::new();
+                let mut results: HashMap<
+                    InternedString,
+                    BTreeSet<semver::Version>,
+                    rustc_hash::FxBuildHasher,
+                > = HashMap::default();
                 for (k, v) in map.iter() {
                     if k.is_real() {
                         results
@@ -89,8 +96,11 @@ fn check<'c>(dp: &mut Index<'c>, root: Rc<Names<'c>>, ver: &semver::Version) -> 
         dp.past_result = cargo_out
             .as_ref()
             .map(|map| {
-                let mut results: HashMap<InternedString, BTreeSet<semver::Version>> =
-                    HashMap::new();
+                let mut results: HashMap<
+                    InternedString,
+                    BTreeSet<semver::Version>,
+                    rustc_hash::FxBuildHasher,
+                > = HashMap::default();
                 for v in map.iter() {
                     results
                         .entry(v.name())

@@ -50,10 +50,16 @@ const TIME_CUT_OFF: f32 = TIME_MAKE_FILE * 4.0;
 
 #[derive(Clone)]
 pub struct Index<'c> {
-    crates: &'c HashMap<InternedString, BTreeMap<semver::Version, (index_data::Version, Summary)>>,
-    past_result: Option<HashMap<InternedString, BTreeSet<semver::Version>>>,
-    dependencies: RefCell<HashSet<(InternedString, semver::Version)>>,
-    pubgrub_dependencies: RefCell<HashSet<(Rc<Names<'c>>, semver::Version)>>,
+    crates: &'c HashMap<
+        InternedString,
+        BTreeMap<semver::Version, (index_data::Version, Summary)>,
+        rustc_hash::FxBuildHasher,
+    >,
+    past_result:
+        Option<HashMap<InternedString, BTreeSet<semver::Version>, rustc_hash::FxBuildHasher>>,
+    dependencies: RefCell<HashSet<(InternedString, semver::Version), rustc_hash::FxBuildHasher>>,
+    pubgrub_dependencies:
+        RefCell<HashSet<(Rc<Names<'c>>, semver::Version), rustc_hash::FxBuildHasher>>,
     start: Cell<Instant>,
     should_cancel_call_count: Cell<u64>,
 }
@@ -63,6 +69,7 @@ impl<'c> Index<'c> {
         crates: &'c HashMap<
             InternedString,
             BTreeMap<semver::Version, (index_data::Version, Summary)>,
+            rustc_hash::FxBuildHasher,
         >,
     ) -> Self {
         Self {
@@ -581,7 +588,7 @@ impl<'c> DependencyProvider for Index<'c> {
 
     type Priority = Reverse<usize>;
 
-    fn prioritize(&self, package: &Rc<Names>, range: &RcSemverPubgrub) -> Self::Priority {
+    fn prioritize(&self, package: &Rc<Names<'c>>, range: &RcSemverPubgrub) -> Self::Priority {
         Reverse(match &**package {
             Names::Links(_name) => {
                 // PubGrub automatically handles when any requirement has no overlap. So this is only deciding a importance of picking the version:
@@ -1001,8 +1008,11 @@ pub fn process_carte_version<'c>(
             .unwrap()
             .as_ref()
             .map(|map| {
-                let mut results: HashMap<InternedString, BTreeSet<semver::Version>> =
-                    HashMap::new();
+                let mut results: HashMap<
+                    InternedString,
+                    BTreeSet<semver::Version>,
+                    rustc_hash::FxBuildHasher,
+                > = HashMap::default();
                 for (k, v) in map.iter() {
                     if k.is_real() {
                         results
@@ -1036,8 +1046,11 @@ pub fn process_carte_version<'c>(
             .unwrap()
             .as_ref()
             .map(|map| {
-                let mut results: HashMap<InternedString, BTreeSet<semver::Version>> =
-                    HashMap::new();
+                let mut results: HashMap<
+                    InternedString,
+                    BTreeSet<semver::Version>,
+                    rustc_hash::FxBuildHasher,
+                > = HashMap::default();
                 for v in map.iter() {
                     results
                         .entry(v.name())
