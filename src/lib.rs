@@ -57,8 +57,7 @@ type IndexMapLookup = HashMap<
 #[derive(Clone)]
 pub struct Index<'c> {
     crates: &'c IndexMapLookup,
-    past_result:
-        Option<HashMap<InternedString, BTreeSet<semver::Version>, rustc_hash::FxBuildHasher>>,
+    past_result: Option<HashMap<&'c str, BTreeSet<semver::Version>, rustc_hash::FxBuildHasher>>,
     dependencies: RefCell<HashSet<(InternedString, semver::Version), rustc_hash::FxBuildHasher>>,
     pubgrub_dependencies:
         RefCell<HashSet<(Rc<Names<'c>>, semver::Version), rustc_hash::FxBuildHasher>>,
@@ -175,6 +174,7 @@ impl<'c> Index<'c> {
     where
         Q: ?Sized + Hash + Eq,
         InternedString: std::borrow::Borrow<Q>,
+        &'c str: std::borrow::Borrow<Q>,
     {
         if let Some(past) = self.past_result.as_ref() {
             let data = self.crates.get(name);
@@ -200,6 +200,7 @@ impl<'c> Index<'c> {
     where
         Q: ?Sized + Hash + Eq,
         InternedString: std::borrow::Borrow<Q>,
+        &'c str: std::borrow::Borrow<Q>,
     {
         if let Some(past) = &self.past_result {
             past.get(name)?.get(ver)?;
@@ -233,6 +234,7 @@ impl<'c> Index<'c> {
     where
         Q: ?Sized + Hash + Eq,
         InternedString: std::borrow::Borrow<Q>,
+        &'c str: std::borrow::Borrow<Q>,
     {
         if range.inner.only_one_compatibility_range().is_some() {
             1
@@ -252,6 +254,7 @@ impl<'c> Index<'c> {
     where
         Q: ?Sized + Hash + Eq,
         InternedString: std::borrow::Borrow<Q>,
+        &'c str: std::borrow::Borrow<Q>,
     {
         if range.inner.as_singleton().is_some() {
             1
@@ -1005,16 +1008,13 @@ pub fn process_carte_version<'c>(
             .as_ref()
             .map(|map| {
                 let mut results: HashMap<
-                    InternedString,
+                    &str,
                     BTreeSet<semver::Version>,
                     rustc_hash::FxBuildHasher,
                 > = HashMap::default();
                 for (k, v) in map.iter() {
                     if k.is_real() {
-                        results
-                            .entry(k.crate_().into())
-                            .or_default()
-                            .insert(v.clone());
+                        results.entry(k.crate_()).or_default().insert(v.clone());
                     }
                 }
                 results
@@ -1043,13 +1043,13 @@ pub fn process_carte_version<'c>(
             .as_ref()
             .map(|map| {
                 let mut results: HashMap<
-                    InternedString,
+                    &str,
                     BTreeSet<semver::Version>,
                     rustc_hash::FxBuildHasher,
                 > = HashMap::default();
                 for v in map.iter() {
                     results
-                        .entry(v.name())
+                        .entry(v.name().as_str())
                         .or_default()
                         .insert(v.version().clone());
                 }

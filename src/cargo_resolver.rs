@@ -23,7 +23,11 @@ impl<'a> Registry for crate::Index<'a> {
     ) -> Poll<CargoResult<()>> {
         if let Some(by_name) = self.crates.get(&dep.package_name()) {
             if let Some(past_result) = &self.past_result {
-                for past_ver in past_result.get(&dep.package_name()).into_iter().flatten() {
+                for past_ver in past_result
+                    .get(dep.package_name().as_str())
+                    .into_iter()
+                    .flatten()
+                {
                     if let Some((_, summary)) = by_name.get(past_ver) {
                         if dep.matches(&summary) {
                             self.dependencies
