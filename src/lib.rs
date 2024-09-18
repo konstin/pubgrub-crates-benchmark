@@ -48,13 +48,15 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 const TIME_MAKE_FILE: f32 = 40.0;
 const TIME_CUT_OFF: f32 = TIME_MAKE_FILE * 4.0;
 
+type IndexMapLookup = HashMap<
+    InternedString,
+    BTreeMap<semver::Version, (index_data::Version, Summary)>,
+    rustc_hash::FxBuildHasher,
+>;
+
 #[derive(Clone)]
 pub struct Index<'c> {
-    crates: &'c HashMap<
-        InternedString,
-        BTreeMap<semver::Version, (index_data::Version, Summary)>,
-        rustc_hash::FxBuildHasher,
-    >,
+    crates: &'c IndexMapLookup,
     past_result:
         Option<HashMap<InternedString, BTreeSet<semver::Version>, rustc_hash::FxBuildHasher>>,
     dependencies: RefCell<HashSet<(InternedString, semver::Version), rustc_hash::FxBuildHasher>>,
@@ -65,13 +67,7 @@ pub struct Index<'c> {
 }
 
 impl<'c> Index<'c> {
-    pub fn new(
-        crates: &'c HashMap<
-            InternedString,
-            BTreeMap<semver::Version, (index_data::Version, Summary)>,
-            rustc_hash::FxBuildHasher,
-        >,
-    ) -> Self {
+    pub fn new(crates: &'c IndexMapLookup) -> Self {
         Self {
             crates,
             past_result: None,
@@ -601,9 +597,9 @@ impl<'c> DependencyProvider for Index<'c> {
             }
 
             Names::Wide(_, req, _, _) | Names::WideFeatures(_, req, _, _, _) => {
-                self.count_wide_matches(range, &*package.crate_(), req)
+                self.count_wide_matches(range, package.crate_(), req)
             }
-            _ => self.count_matches(range, &*package.crate_()),
+            _ => self.count_matches(range, package.crate_()),
         })
     }
 

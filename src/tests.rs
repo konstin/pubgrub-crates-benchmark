@@ -8,13 +8,7 @@ fn case_from_file_name(file_name: &str) -> (&str, semver::Version) {
     (name, ver.parse().unwrap())
 }
 
-fn crates_data_from_file<P: AsRef<Path>>(
-    path: P,
-) -> HashMap<
-    InternedString,
-    BTreeMap<semver::Version, (index_data::Version, Summary)>,
-    rustc_hash::FxBuildHasher,
-> {
+fn crates_data_from_file<P: AsRef<Path>>(path: P) -> IndexMapLookup {
     let data = std::fs::read_to_string(path).unwrap();
     let data: Vec<index_data::Version> = ron::de::from_str(&data).unwrap();
     read_test_file(data)

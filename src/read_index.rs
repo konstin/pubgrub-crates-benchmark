@@ -1,30 +1,19 @@
-use std::{
-    collections::{BTreeMap, HashMap},
-    time::Instant,
-};
+use std::time::Instant;
 
 use cargo::{core::Summary, util::interning::InternedString};
 use crates_index::GitIndex;
 use rayon::iter::ParallelIterator;
 
-use crate::index_data;
+use crate::{index_data, IndexMapLookup};
 
 pub fn read_index(
     index: &GitIndex,
     create_filter: impl Fn(&str) -> bool + Sync + 'static,
     version_filter: impl Fn(&index_data::Version) -> bool + Sync + 'static,
-) -> HashMap<
-    InternedString,
-    BTreeMap<semver::Version, (index_data::Version, Summary)>,
-    rustc_hash::FxBuildHasher,
-> {
+) -> IndexMapLookup {
     println!("Start reading index");
     let start = Instant::now();
-    let crates: HashMap<
-        InternedString,
-        BTreeMap<semver::Version, (index_data::Version, Summary)>,
-        rustc_hash::FxBuildHasher,
-    > = index
+    let crates: IndexMapLookup = index
         .crates_parallel()
         .map(|c| c.unwrap())
         .filter(|crt| create_filter(crt.name()))
@@ -52,18 +41,8 @@ pub fn read_index(
 }
 
 #[cfg(test)]
-pub fn read_test_file(
-    iter: impl IntoIterator<Item = index_data::Version>,
-) -> HashMap<
-    InternedString,
-    BTreeMap<semver::Version, (index_data::Version, Summary)>,
-    rustc_hash::FxBuildHasher,
-> {
-    let mut deps: HashMap<
-        InternedString,
-        BTreeMap<semver::Version, (index_data::Version, Summary)>,
-        rustc_hash::FxBuildHasher,
-    > = HashMap::default();
+pub fn read_test_file(iter: impl IntoIterator<Item = index_data::Version>) -> IndexMapLookup {
+    let mut deps = IndexMapLookup::default();
 
     for v in iter {
         let s = (&v).try_into().unwrap();
