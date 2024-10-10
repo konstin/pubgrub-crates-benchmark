@@ -17,7 +17,7 @@ semver-pubgrub = { git="https://github.com/pubgrub-rs/semver-pubgrub", features=
 pubgrub = { git="https://github.com/pubgrub-rs/pubgrub", branch="dev", features=["serde"] }
 itertools = "0.12.1"
 csv = "1.3.0"
-cargo = {git="https://github.com/Eh2406/cargo.git", branch="wrap_is_not_cheap"}
+cargo = {git="https://github.com/rust-lang/cargo", branch="master"}
 anyhow = "1.0.86"
 indexmap = "2.2.6"
 either = "1.13.0"
