@@ -5,7 +5,7 @@ use benchmark_from_crates::{
 };
 use clap::Parser;
 use indicatif::{ParallelProgressIterator as _, ProgressBar, ProgressFinish, ProgressStyle};
-use rayon::iter::{IntoParallelRefIterator as _, ParallelIterator as _};
+use rayon::iter::{IntoParallelIterator as _, IntoParallelRefIterator as _, ParallelIterator as _};
 
 #[derive(Parser, Debug)]
 #[command(about, long_about = None)]
@@ -20,6 +20,10 @@ struct Args {
     /// Sets the number of threads to be used in the rayon threadpool.
     #[clap(long, short, default_value_t = 0)]
     threads: usize,
+
+    /// Filter to only process crates with a name that contains this string.
+    #[clap(long)]
+    filter: Option<String>,
 }
 
 fn main() {
@@ -74,13 +78,19 @@ fn main() {
         )
     });
 
+    let to_prosses: Vec<_> = data
+        .par_iter()
+        .filter(|(c, _)| args.filter.as_ref().map_or(true, |f| c.contains(f)))
+        .flat_map(|(c, v)| v.par_iter().map(|(v, _)| (c.clone(), v)))
+        .collect();
+
     let template = "PubGrub: [Time: {elapsed}, Rate: {per_sec}, Remaining: {eta}] {wide_bar} {pos:>6}/{len:6}: {percent:>3}%";
-    let style = ProgressBar::new(data.values().map(|v| v.len()).sum::<usize>() as u64)
+    let style = ProgressBar::new(to_prosses.len() as u64)
         .with_style(ProgressStyle::with_template(template).unwrap())
         .with_finish(ProgressFinish::AndLeave);
 
-    data.par_iter()
-        .flat_map(|(c, v)| v.par_iter().map(|(v, _)| (c.clone(), v)))
+    to_prosses
+        .into_par_iter()
         .progress_with(style)
         .map(|(crt, ver)| {
             process_crate_version(&mut Index::new(&data), crt, ver.clone(), args.mode)
