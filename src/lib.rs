@@ -599,14 +599,15 @@ impl<'c> DependencyProvider for Index<'c> {
                 usize::MAX
             }
 
-            Names::Wide(_, req, _, _)
-            | Names::WideFeatures(_, req, _, _, _)
-            | Names::WideDefaultFeatures(_, req, _, _) => {
-                self.count_wide_matches(range, package.crate_(), req)
+            Names::Wide(_, req, _, _) => self.count_wide_matches(range, package.crate_(), req),
+            Names::WideFeatures(_, req, _, _, _) | Names::WideDefaultFeatures(_, req, _, _) => {
+                self.count_wide_matches(range, package.crate_(), req).saturating_add(1)
             }
-            Names::Bucket(_, _, _)
-            | Names::BucketFeatures(_, _, _)
-            | Names::BucketDefaultFeatures(_, _) => self.count_matches(range, package.crate_()),
+
+            Names::Bucket(_, _, _) => self.count_matches(range, package.crate_()),
+            Names::BucketFeatures(_, _, _) | Names::BucketDefaultFeatures(_, _) => {
+                self.count_matches(range, package.crate_()).saturating_add(1)
+            }
         })
     }
 
