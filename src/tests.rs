@@ -59,7 +59,7 @@ fn check<'c>(dp: &mut Index<'c>, root: Rc<Names<'c>>, ver: &semver::Version) -> 
             .as_ref()
             .map(|map| {
                 let mut results: HashMap<
-                    &str,
+                    InternedString,
                     BTreeSet<semver::Version>,
                     rustc_hash::FxBuildHasher,
                 > = HashMap::default();
@@ -88,13 +88,13 @@ fn check<'c>(dp: &mut Index<'c>, root: Rc<Names<'c>>, ver: &semver::Version) -> 
             .as_ref()
             .map(|map| {
                 let mut results: HashMap<
-                    &str,
+                    InternedString,
                     BTreeSet<semver::Version>,
                     rustc_hash::FxBuildHasher,
                 > = HashMap::default();
                 for v in map.iter() {
                     results
-                        .entry(v.name().as_str())
+                        .entry(v.name())
                         .or_default()
                         .insert(v.version().clone());
                 }
@@ -145,6 +145,7 @@ fn named_from_files_pass_tests() {
         let case = case.unwrap().path();
         let file_name = case.file_name().unwrap().to_string_lossy();
         let (name, ver) = case_from_file_name(&file_name);
+        let name = InternedString::new(name);
         eprintln!("Running: {name} @ {ver}");
         let start_time = std::time::Instant::now();
         let crates = crates_data_from_file(&case);
@@ -167,6 +168,7 @@ fn named_from_files_pass_without_vers() {
         let case = case.unwrap().path();
         let file_name = case.file_name().unwrap().to_string_lossy();
         let (name, ver) = case_from_file_name(&file_name);
+        let name = InternedString::new(name);
         eprintln!("Running: {name} @ {ver}");
         let root = new_bucket(name, (&ver).into(), true);
         let start_time = std::time::Instant::now();
@@ -270,7 +272,7 @@ fn all_vers_in_files_pass_tests() {
         let mut dp = Index::new(&crates);
         for (name, vers) in &crates {
             for ver in vers.keys() {
-                let root = new_bucket(&name, ver.into(), true);
+                let root = new_bucket(*name, ver.into(), true);
                 if !check(&mut dp, root, ver) {
                     dp.make_index_ron_file();
                     faild.push(format!("{file_name}:{name}@{ver}"));

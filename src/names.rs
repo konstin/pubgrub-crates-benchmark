@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use cargo::util::interning::InternedString;
 use semver_pubgrub::SemverCompatibility;
 
 #[derive(Clone, Copy, Eq, PartialEq, Hash, PartialOrd, Ord)]
@@ -49,47 +50,47 @@ impl serde::Serialize for FeatureNamespace<'_> {
 
 #[derive(Clone, Eq, PartialEq, Hash)]
 pub enum Names<'c> {
-    Bucket(&'c str, SemverCompatibility, bool),
-    BucketFeatures(&'c str, SemverCompatibility, FeatureNamespace<'c>),
-    BucketDefaultFeatures(&'c str, SemverCompatibility),
+    Bucket(InternedString, SemverCompatibility, bool),
+    BucketFeatures(InternedString, SemverCompatibility, FeatureNamespace<'c>),
+    BucketDefaultFeatures(InternedString, SemverCompatibility),
     Wide(
-        &'c str,
+        InternedString,
         &'c semver::VersionReq,
-        &'c str,
+        InternedString,
         SemverCompatibility,
     ),
     WideFeatures(
-        &'c str,
+        InternedString,
         &'c semver::VersionReq,
-        &'c str,
+        InternedString,
         SemverCompatibility,
         FeatureNamespace<'c>,
     ),
     WideDefaultFeatures(
-        &'c str,
+        InternedString,
         &'c semver::VersionReq,
-        &'c str,
+        InternedString,
         SemverCompatibility,
     ),
-    Links(&'c str),
+    Links(InternedString),
 }
 
 pub fn new_bucket<'c>(
-    crate_: &'c str,
+    crate_: InternedString,
     compat: SemverCompatibility,
     all_features: bool,
 ) -> Rc<Names<'c>> {
     Rc::new(Names::Bucket(crate_, compat, all_features))
 }
 pub fn new_wide<'c>(
-    crate_: &'c str,
+    crate_: InternedString,
     req: &'c semver::VersionReq,
-    from: &'c str,
+    from: InternedString,
     compat: SemverCompatibility,
 ) -> Rc<Names<'c>> {
     Rc::new(Names::Wide(crate_, req, from, compat))
 }
-pub fn new_links<'c>(crate_: &'c str) -> Rc<Names<'c>> {
+pub fn new_links<'c>(crate_: InternedString) -> Rc<Names<'c>> {
     Rc::new(Names::Links(crate_))
 }
 
@@ -114,7 +115,7 @@ impl<'c> Ord for Names<'c> {
                 | Names::Wide(c, _, _, _)
                 | Names::WideFeatures(c, _, _, _, _)
                 | Names::WideDefaultFeatures(c, _, _, _)
-                | Names::Links(c) => *c,
+                | Names::Links(c) => c,
             }
         })
         .then_with(|| self.to_string().cmp(&other.to_string()))
@@ -131,7 +132,7 @@ impl<'c> Names<'c> {
     pub fn is_real(&self) -> bool {
         matches!(self, &Self::Bucket(..))
     }
-    pub fn crate_(&self) -> &'c str {
+    pub fn crate_(&self) -> InternedString {
         match self {
             Names::Bucket(c, _, _)
             | Names::BucketFeatures(c, _, _)
@@ -146,7 +147,7 @@ impl<'c> Names<'c> {
         use Names::*;
         Rc::new(match self {
             Bucket(a, b, _) | BucketFeatures(a, b, _) => BucketDefaultFeatures(*a, *b),
-            Wide(a, b, c, d) | WideFeatures(a, b, c, d, _) => WideDefaultFeatures(*a, b, c, *d),
+            Wide(a, b, c, d) | WideFeatures(a, b, c, d, _) => WideDefaultFeatures(*a, b, *c, *d),
             Links(_) => panic!(),
             s @ BucketDefaultFeatures(_, _) | s @ WideDefaultFeatures(_, _, _, _) => s.clone(),
         })
@@ -158,7 +159,7 @@ impl<'c> Names<'c> {
                 BucketFeatures(*a, *b, feat)
             }
             Wide(a, b, c, d) | WideFeatures(a, b, c, d, _) | WideDefaultFeatures(a, b, c, d) => {
-                WideFeatures(*a, b, c, *d, feat)
+                WideFeatures(*a, b, *c, *d, feat)
             }
             Links(_) => panic!(),
         })
