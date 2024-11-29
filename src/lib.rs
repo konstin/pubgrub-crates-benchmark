@@ -7,7 +7,6 @@ use std::{
     hash::{Hash, Hasher},
     io::{BufWriter, Write},
     ops::Bound,
-    rc::Rc,
     time::Instant,
 };
 
@@ -60,8 +59,7 @@ pub struct Index<'c> {
     past_result:
         Option<HashMap<InternedString, BTreeSet<semver::Version>, rustc_hash::FxBuildHasher>>,
     dependencies: RefCell<HashSet<(InternedString, semver::Version), rustc_hash::FxBuildHasher>>,
-    pubgrub_dependencies:
-        RefCell<HashSet<(Rc<Names<'c>>, semver::Version), rustc_hash::FxBuildHasher>>,
+    pubgrub_dependencies: RefCell<HashSet<(Names<'c>, semver::Version), rustc_hash::FxBuildHasher>>,
     start: Cell<Instant>,
     should_cancel_call_count: Cell<u64>,
 }
@@ -110,7 +108,7 @@ impl<'c> Index<'c> {
 
         let Some(name) = deps
             .iter()
-            .find(|(name, _)| matches!(&**name, Names::Bucket(_, _, all) if *all))
+            .find(|(name, _)| matches!(name, Names::Bucket(_, _, all) if *all))
         else {
             panic!("no root")
         };
@@ -160,7 +158,7 @@ impl<'c> Index<'c> {
 
         let name = grub_deps
             .iter()
-            .find(|(name, _)| matches!(&**name, Names::Bucket(_, _, all) if *all))
+            .find(|(name, _)| matches!(name, Names::Bucket(_, _, all) if *all))
             .unwrap();
 
         let out = self.make_index_ron_data();
@@ -268,7 +266,7 @@ impl<'c> Index<'c> {
         dep: &'c index_data::Dependency,
         from: InternedString,
         compat: impl Into<SemverCompatibility>,
-    ) -> (Rc<Names<'c>>, RcSemverPubgrub) {
+    ) -> (Names<'c>, RcSemverPubgrub) {
         if let Some(compat) = dep
             .pubgrub_req
             .only_one_compatibility_range()
@@ -287,14 +285,14 @@ impl<'c> Index<'c> {
     }
 
     #[must_use]
-    fn check_cycles(&self, root: Rc<Names<'c>>, pubmap: &SelectedDependencies<Self>) -> bool {
+    fn check_cycles(&self, root: Names<'c>, pubmap: &SelectedDependencies<Self>) -> bool {
         let mut vertions: HashMap<
             (InternedString, SemverCompatibility, bool),
             (semver::Version, BTreeSet<_>, BTreeSet<_>),
         > = HashMap::new();
         // Identify the selected packages
         for (names, ver) in pubmap {
-            if let Names::Bucket(name, cap, is_root) = &**names {
+            if let Names::Bucket(name, cap, is_root) = names {
                 if cap != &SemverCompatibility::from(ver) {
                     panic!("cap not meet");
                 }
@@ -310,7 +308,7 @@ impl<'c> Index<'c> {
         }
         // Identify the selected package features and deps
         for (name, ver) in pubmap {
-            if let Names::BucketFeatures(name, cap, feat) = &**name {
+            if let Names::BucketFeatures(name, cap, feat) = name {
                 if cap != &SemverCompatibility::from(ver) {
                     panic!("cap not meet for feature");
                 }
@@ -330,11 +328,11 @@ impl<'c> Index<'c> {
 
         let mut checked = HashSet::with_capacity(vertions.len());
         let mut visited = HashSet::with_capacity(4);
-        let Names::Bucket(name, cap, is_root) = &*root else {
+        let Names::Bucket(name, cap, is_root) = root else {
             panic!("root not bucket");
         };
         self.visit(
-            (*name, *cap, *is_root),
+            (name, cap, is_root),
             pubmap,
             &vertions,
             &mut visited,
@@ -388,7 +386,7 @@ impl<'c> Index<'c> {
     }
 
     #[must_use]
-    fn check(&self, root: Rc<Names>, pubmap: &SelectedDependencies<Self>) -> bool {
+    fn check(&self, root: Names, pubmap: &SelectedDependencies<Self>) -> bool {
         // Basic dependency resolution properties
         if !pubmap.contains_key(&root) {
             return false;
@@ -413,7 +411,7 @@ impl<'c> Index<'c> {
         > = HashMap::new();
         // Identify the selected packages
         for (names, ver) in pubmap {
-            if let Names::Bucket(name, cap, is_root) = &**names {
+            if let Names::Bucket(name, cap, is_root) = names {
                 if cap != &SemverCompatibility::from(ver) {
                     return false;
                 }
@@ -432,7 +430,7 @@ impl<'c> Index<'c> {
         }
         // Identify the selected package features and deps
         for (name, ver) in pubmap {
-            if let Names::BucketFeatures(name, cap, feat) = &**name {
+            if let Names::BucketFeatures(name, cap, feat) = name {
                 if cap != &SemverCompatibility::from(ver) {
                     return false;
                 }
@@ -450,7 +448,7 @@ impl<'c> Index<'c> {
             }
         }
         for (name, ver) in pubmap {
-            if let Names::BucketDefaultFeatures(name, cap) = &**name {
+            if let Names::BucketDefaultFeatures(name, cap) = name {
                 if cap != &SemverCompatibility::from(ver) {
                     return false;
                 }
@@ -533,8 +531,8 @@ impl std::fmt::Display for SomeError {
 impl Error for SomeError {}
 
 fn deps_insert<'c>(
-    deps: &mut DependencyConstraints<Rc<Names<'c>>, RcSemverPubgrub>,
-    n: Rc<Names<'c>>,
+    deps: &mut DependencyConstraints<Names<'c>, RcSemverPubgrub>,
+    n: Names<'c>,
     r: RcSemverPubgrub,
 ) {
     deps.entry(n)
@@ -543,7 +541,7 @@ fn deps_insert<'c>(
 }
 
 impl<'c> DependencyProvider for Index<'c> {
-    type P = Rc<Names<'c>>;
+    type P = Names<'c>;
 
     type V = semver::Version;
 
@@ -553,10 +551,10 @@ impl<'c> DependencyProvider for Index<'c> {
     type Err = SomeError;
     fn choose_version(
         &self,
-        package: &Rc<Names>,
+        package: &Names,
         range: &RcSemverPubgrub,
     ) -> Result<Option<semver::Version>, Self::Err> {
-        Ok(match &**package {
+        Ok(match package {
             Names::Links(_name) => {
                 let Some((_, Bound::Included(v))) = range.inner.bounding_range() else {
                     return Err(SomeError);
@@ -585,8 +583,8 @@ impl<'c> DependencyProvider for Index<'c> {
 
     type Priority = Reverse<usize>;
 
-    fn prioritize(&self, package: &Rc<Names<'c>>, range: &RcSemverPubgrub) -> Self::Priority {
-        Reverse(match &**package {
+    fn prioritize(&self, package: &Names<'c>, range: &RcSemverPubgrub) -> Self::Priority {
+        Reverse(match package {
             Names::Links(_name) => {
                 // PubGrub automatically handles when any requirement has no overlap. So this is only deciding a importance of picking the version:
                 //
@@ -611,13 +609,13 @@ impl<'c> DependencyProvider for Index<'c> {
 
     fn get_dependencies(
         &self,
-        package: &Rc<Names<'c>>,
+        package: &Names<'c>,
         version: &semver::Version,
     ) -> Result<Dependencies<Self::P, Self::VS, Self::M>, Self::Err> {
         self.pubgrub_dependencies
             .borrow_mut()
             .insert((package.clone(), version.clone()));
-        Ok(match &**package {
+        Ok(match package {
             &Names::Bucket(name, _major, all_features) => {
                 let Some(index_ver) = self.get_version(name.as_str(), version) else {
                     return Err(SomeError);

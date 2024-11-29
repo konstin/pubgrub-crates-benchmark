@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use cargo::util::interning::InternedString;
 use semver_pubgrub::SemverCompatibility;
 
@@ -79,19 +77,19 @@ pub fn new_bucket<'c>(
     crate_: InternedString,
     compat: SemverCompatibility,
     all_features: bool,
-) -> Rc<Names<'c>> {
-    Rc::new(Names::Bucket(crate_, compat, all_features))
+) -> Names<'c> {
+    Names::Bucket(crate_, compat, all_features)
 }
 pub fn new_wide<'c>(
     crate_: InternedString,
     req: &'c semver::VersionReq,
     from: InternedString,
     compat: SemverCompatibility,
-) -> Rc<Names<'c>> {
-    Rc::new(Names::Wide(crate_, req, from, compat))
+) -> Names<'c> {
+    Names::Wide(crate_, req, from, compat)
 }
-pub fn new_links<'c>(crate_: InternedString) -> Rc<Names<'c>> {
-    Rc::new(Names::Links(crate_))
+pub fn new_links<'c>(crate_: InternedString) -> Names<'c> {
+    Names::Links(crate_)
 }
 
 impl<'c> Ord for Names<'c> {
@@ -143,18 +141,18 @@ impl<'c> Names<'c> {
             Names::Links(_) => panic!(),
         }
     }
-    pub fn with_default_features(&self) -> Rc<Self> {
+    pub fn with_default_features(&self) -> Self {
         use Names::*;
-        Rc::new(match self {
+        match self {
             Bucket(a, b, _) | BucketFeatures(a, b, _) => BucketDefaultFeatures(*a, *b),
             Wide(a, b, c, d) | WideFeatures(a, b, c, d, _) => WideDefaultFeatures(*a, b, *c, *d),
             Links(_) => panic!(),
             s @ BucketDefaultFeatures(_, _) | s @ WideDefaultFeatures(_, _, _, _) => s.clone(),
-        })
+        }
     }
-    pub fn with_features(&self, feat: FeatureNamespace<'c>) -> Rc<Self> {
+    pub fn with_features(&self, feat: FeatureNamespace<'c>) -> Self {
         use Names::*;
-        Rc::new(match self {
+        match self {
             Bucket(a, b, _) | BucketFeatures(a, b, _) | BucketDefaultFeatures(a, b) => {
                 BucketFeatures(*a, *b, feat)
             }
@@ -162,7 +160,7 @@ impl<'c> Names<'c> {
                 WideFeatures(*a, b, *c, *d, feat)
             }
             Links(_) => panic!(),
-        })
+        }
     }
 }
 

@@ -15,7 +15,7 @@ fn crates_data_from_file<P: AsRef<Path>>(path: P) -> IndexMapLookup {
 }
 
 #[must_use]
-fn check<'c>(dp: &mut Index<'c>, root: Rc<Names<'c>>, ver: &semver::Version) -> bool {
+fn check<'c>(dp: &mut Index<'c>, root: Names<'c>, ver: &semver::Version) -> bool {
     dp.reset();
     let res = resolve(dp, root.clone(), ver.clone());
     let pub_cyclic_package_dependency = if let Ok(map) = res.as_ref() {
