@@ -1,11 +1,13 @@
-use std::{sync::mpsc, thread::spawn, time::Instant};
+use std::{sync::mpsc, thread, time::Instant};
+
+use crossbeam::channel::unbounded;
 
 use benchmark_from_crates::{
     index_data, process_crate_version, read_index::read_index, Index, Mode, OutputSummary,
 };
 use clap::Parser;
-use indicatif::{ParallelProgressIterator as _, ProgressBar, ProgressFinish, ProgressStyle};
-use rayon::iter::{IntoParallelIterator as _, IntoParallelRefIterator as _, ParallelIterator as _};
+use indicatif::{ProgressBar, ProgressFinish, ProgressStyle};
+use rayon::iter::{IntoParallelRefIterator as _, ParallelIterator as _};
 
 #[derive(Parser, Debug)]
 #[command(about, long_about = None)]
@@ -52,66 +54,70 @@ fn main() {
             .unwrap();
     let data = read_index(&index, create_filter, version_filter);
 
-    let (tx, rx) = mpsc::channel::<OutputSummary>();
+    thread::scope(|s| {
+        let (out_tx, out_rx) = mpsc::channel::<OutputSummary>();
+        let (to_prosses_tx, to_prosses_rx) = unbounded();
+        for _ in 0..rayon::current_num_threads() {
+            let to_prosses_rx = to_prosses_rx.clone();
+            let out_tx = out_tx.clone();
+            let mut index = Index::new(&data);
+            s.spawn(move || {
+                for (crt, ver) in to_prosses_rx {
+                    out_tx
+                        .send(process_crate_version(&mut index, crt, ver, args.mode))
+                        .unwrap();
+                }
+            });
+        }
+        drop(out_tx);
 
-    let file_handle = spawn(|| {
-        let mut out_file = csv::Writer::from_path("out.csv").unwrap();
+        let to_prosses: Vec<_> = data
+            .par_iter()
+            .filter(|(c, _)| args.filter.as_ref().map_or(true, |f| c.contains(f)))
+            .flat_map(|(c, v)| v.par_iter().map(|(v, _)| (c.clone(), v)))
+            .collect();
+
         let start = Instant::now();
+        for (crt, ver) in &to_prosses {
+            to_prosses_tx.send((*crt, (*ver).clone())).unwrap()
+        }
+        drop(to_prosses_tx);
+
+        let template = "PubGrub: [Time: {elapsed}, Rate: {per_sec}, Remaining: {eta}] {wide_bar} {pos:>6}/{len:6}: {percent:>3}%";
+        let style = ProgressBar::new(to_prosses.len() as u64)
+            .with_style(ProgressStyle::with_template(template).unwrap())
+            .with_finish(ProgressFinish::AndLeave);
+        style.set_length(to_prosses.len() as _);
+
+        let mut out_file = csv::Writer::from_path("out.csv").unwrap();
         let mut pub_cpu_time = 0.0;
         let mut cargo_cpu_time = 0.0;
         let mut cargo_pub_lock_cpu_time = 0.0;
         let mut pub_cargo_lock_cpu_time = 0.0;
-        for row in rx {
+        for row in out_rx {
+            style.inc(1);
             pub_cpu_time += row.time;
             cargo_cpu_time += row.cargo_time;
             cargo_pub_lock_cpu_time += row.cargo_check_pub_lock_time;
             pub_cargo_lock_cpu_time += row.pub_check_cargo_lock_time;
             out_file.serialize(row).unwrap();
         }
+        let wall_time = start.elapsed().as_secs_f32();
         out_file.flush().unwrap();
-        (
-            pub_cpu_time,
-            cargo_cpu_time,
-            cargo_pub_lock_cpu_time,
-            pub_cargo_lock_cpu_time,
-            start.elapsed().as_secs_f32(),
-        )
+        style.finish();
+
+        println!("!!!!!!!!!! Timings !!!!!!!!!!");
+        let p = |n: &str, t: f32| {
+            if t > 0.0 {
+                println!("{n:>20} time: {:>8.2}s == {:>6.2}min", t, t / 60.0)
+            } else {
+                println!("{n:>20} time: skipped")
+            }
+        };
+        p("Pub CPU", pub_cpu_time);
+        p("Cargo CPU", cargo_cpu_time);
+        p("Cargo check lock CPU", cargo_pub_lock_cpu_time);
+        p("Pub check lock CPU", pub_cargo_lock_cpu_time);
+        p("Wall", wall_time);
     });
-
-    let to_prosses: Vec<_> = data
-        .par_iter()
-        .filter(|(c, _)| args.filter.as_ref().map_or(true, |f| c.contains(f)))
-        .flat_map(|(c, v)| v.par_iter().map(|(v, _)| (c.clone(), v)))
-        .collect();
-
-    let template = "PubGrub: [Time: {elapsed}, Rate: {per_sec}, Remaining: {eta}] {wide_bar} {pos:>6}/{len:6}: {percent:>3}%";
-    let style = ProgressBar::new(to_prosses.len() as u64)
-        .with_style(ProgressStyle::with_template(template).unwrap())
-        .with_finish(ProgressFinish::AndLeave);
-
-    to_prosses
-        .into_par_iter()
-        .progress_with(style)
-        .map(|(crt, ver)| {
-            process_crate_version(&mut Index::new(&data), crt, ver.clone(), args.mode)
-        })
-        .for_each(move |csv_line| {
-            let _ = tx.send(csv_line);
-        });
-
-    let (pub_cpu_time, cargo_cpu_time, cargo_pub_lock_cpu_time, pub_cargo_lock_cpu_time, wall_time) =
-        file_handle.join().unwrap();
-    println!("!!!!!!!!!! Timings !!!!!!!!!!");
-    let p = |n: &str, t: f32| {
-        if t > 0.0 {
-            println!("{n:>20} time: {:>8.2}s == {:>6.2}min", t, t / 60.0)
-        } else {
-            println!("{n:>20} time: skipped")
-        }
-    };
-    p("Pub CPU", pub_cpu_time);
-    p("Cargo CPU", cargo_cpu_time);
-    p("Cargo check lock CPU", cargo_pub_lock_cpu_time);
-    p("Pub check lock CPU", pub_cargo_lock_cpu_time);
-    p("Wall", wall_time);
 }
