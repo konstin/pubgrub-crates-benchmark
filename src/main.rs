@@ -8,6 +8,7 @@ use benchmark_from_crates::{
 use clap::Parser;
 use indicatif::{ProgressBar, ProgressFinish, ProgressStyle};
 use rayon::iter::{IntoParallelRefIterator as _, ParallelIterator as _};
+use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 #[derive(Parser, Debug)]
 #[command(about, long_about = None)]
@@ -52,7 +53,14 @@ fn main() {
     let index =
         crates_index::GitIndex::with_path("index", "https://github.com/rust-lang/crates.io-index")
             .unwrap();
+    let index_commit = index.changes().unwrap().next().unwrap().unwrap();
     let data = read_index(&index, create_filter, version_filter);
+
+    let to_prosses: Vec<_> = data
+        .par_iter()
+        .filter(|(c, _)| args.filter.as_ref().map_or(true, |f| c.contains(f)))
+        .flat_map(|(c, v)| v.par_iter().map(|(v, _)| (c.clone(), v)))
+        .collect();
 
     thread::scope(|s| {
         let (out_tx, out_rx) = mpsc::channel::<OutputSummary>();
@@ -70,12 +78,6 @@ fn main() {
             });
         }
         drop(out_tx);
-
-        let to_prosses: Vec<_> = data
-            .par_iter()
-            .filter(|(c, _)| args.filter.as_ref().map_or(true, |f| c.contains(f)))
-            .flat_map(|(c, v)| v.par_iter().map(|(v, _)| (c.clone(), v)))
-            .collect();
 
         let start = Instant::now();
         for (crt, ver) in &to_prosses {
@@ -114,6 +116,13 @@ fn main() {
                 println!("{n:>20} time: skipped")
             }
         };
+        println!("        index commit hash: {}", index_commit.commit_hex());
+        println!(
+            "        index commit time: {}",
+            OffsetDateTime::from(index_commit.time())
+                .format(&Rfc3339)
+                .unwrap()
+        );
         p("Pub CPU", pub_cpu_time);
         p("Cargo CPU", cargo_cpu_time);
         p("Cargo check lock CPU", cargo_pub_lock_cpu_time);
