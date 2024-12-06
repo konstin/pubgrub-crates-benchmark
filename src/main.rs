@@ -91,7 +91,19 @@ fn main() {
             .with_finish(ProgressFinish::AndLeave);
         style.set_length(to_prosses.len() as _);
 
-        let mut out_file = csv::Writer::from_path("out.csv").unwrap();
+        let mut file_name = "out".to_string();
+        if args.with_solana {
+            file_name += "_with_solana";
+        }
+        if let Some(f) = args.filter {
+            file_name += "_filtered_to_";
+            file_name += &f;
+        }
+        file_name += "_index_hash_";
+        file_name += &index_commit.commit_hex()[..4];
+        file_name += ".csv";
+
+        let mut out_file = csv::Writer::from_path(&file_name).unwrap();
         let mut pub_cpu_time = 0.0;
         let mut cargo_cpu_time = 0.0;
         let mut cargo_pub_lock_cpu_time = 0.0;
