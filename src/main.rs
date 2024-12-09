@@ -135,6 +135,15 @@ fn main() {
                 .format(&Rfc3339)
                 .unwrap()
         );
+        println!("               index size: {}", to_prosses.len());
+        println!(
+            "          solana in index: {}",
+            to_prosses
+                .iter()
+                .filter(|(name, _)| name.contains("solana"))
+                .count()
+        );
+
         p("Pub CPU", pub_cpu_time);
         p("Cargo CPU", cargo_cpu_time);
         p("Cargo check lock CPU", cargo_pub_lock_cpu_time);
