@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 indicatif = {version = "0.17.7", features = ["rayon"]}
-crates-index = { version="3", features=["git", "git-https", "parallel"] }
+crates-index = { version="3.4", features=["git", "git-https", "parallel"] }
 rayon = "1.9"
 semver = { version = "1" , features=[ "serde" ] }
 serde = { version = "1.0", features = ["derive"] }

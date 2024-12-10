@@ -41,7 +41,8 @@ impl<'a> Registry for crate::Index<'a> {
                 for (_, summary) in by_name.values() {
                     let matched = match kind {
                         QueryKind::Exact => dep.matches(&summary),
-                        QueryKind::Alternatives => true,
+                        QueryKind::AlternativeNames => true,
+                        QueryKind::RejectedVersions => true,
                         QueryKind::Normalized => true,
                     };
                     if matched {

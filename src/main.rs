@@ -27,6 +27,10 @@ struct Args {
     /// Filter to only process crates with a name that contains this string.
     #[clap(long)]
     filter: Option<String>,
+
+    /// Use a particular refspec from the index to process.
+    #[clap(long)]
+    commit: Option<String>,
 }
 
 fn main() {
@@ -50,10 +54,12 @@ fn main() {
     let version_filter = |version: &index_data::Version| !version.yanked;
     println!("!!!!!!!!!! Excluding Yanked !!!!!!!!!!");
 
-    let index =
+    let mut index =
         crates_index::GitIndex::with_path("index", "https://github.com/rust-lang/crates.io-index")
             .unwrap();
-    let index_commit = index.changes().unwrap().next().unwrap().unwrap();
+    if let Some(commit) = args.commit {
+        index.set_commit_from_refspec(&commit).unwrap();
+    }
     let data = read_index(&index, create_filter, version_filter);
 
     let to_prosses: Vec<_> = data
@@ -100,7 +106,7 @@ fn main() {
             file_name += &f;
         }
         file_name += "_index_hash_";
-        file_name += &index_commit.commit_hex()[..4];
+        file_name += &index.commit_hex()[..4];
         file_name += ".csv";
 
         let mut out_file = csv::Writer::from_path(&file_name).unwrap();
@@ -128,10 +134,10 @@ fn main() {
                 println!("{n:>20} time: skipped")
             }
         };
-        println!("        index commit hash: {}", index_commit.commit_hex());
+        println!("        index commit hash: {}", index.commit_hex());
         println!(
             "        index commit time: {}",
-            OffsetDateTime::from(index_commit.time())
+            OffsetDateTime::from(index.time().unwrap())
                 .format(&Rfc3339)
                 .unwrap()
         );
