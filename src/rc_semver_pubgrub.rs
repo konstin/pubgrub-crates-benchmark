@@ -41,23 +41,20 @@ impl VersionSet for RcSemverPubgrub {
     fn singleton(v: Self::V) -> Self {
         ARC_SEMVER_PUBGRUB_SINGLETON.with_borrow_mut(|map| {
             map.entry(v)
-                .or_insert_with_key(|v| RcSemverPubgrub {
-                    inner: Rc::new(SemverPubgrub::singleton(v.clone())),
-                })
+                .or_insert_with_key(|v| RcSemverPubgrub::new(SemverPubgrub::singleton(v.clone())))
                 .clone()
         })
     }
 
     fn complement(&self) -> Self {
-        RcSemverPubgrub {
-            inner: Rc::new(self.inner.complement()),
-        }
+        RcSemverPubgrub::new(self.inner.complement())
     }
 
     fn intersection(&self, other: &Self) -> Self {
-        RcSemverPubgrub {
-            inner: Rc::new(self.inner.intersection(&other.inner)),
+        if Rc::ptr_eq(&self.inner, &other.inner) {
+            return self.clone();
         }
+        RcSemverPubgrub::new(self.inner.intersection(&other.inner))
     }
 
     fn contains(&self, v: &Self::V) -> bool {
@@ -65,22 +62,27 @@ impl VersionSet for RcSemverPubgrub {
     }
 
     fn full() -> Self {
-        RcSemverPubgrub {
-            inner: Rc::new(SemverPubgrub::full()),
-        }
+        RcSemverPubgrub::new(SemverPubgrub::full())
     }
 
     fn union(&self, other: &Self) -> Self {
-        RcSemverPubgrub {
-            inner: Rc::new(self.inner.union(&other.inner)),
+        if Rc::ptr_eq(&self.inner, &other.inner) {
+            return self.clone();
         }
+        RcSemverPubgrub::new(self.inner.union(&other.inner))
     }
 
     fn is_disjoint(&self, other: &Self) -> bool {
+        if Rc::ptr_eq(&self.inner, &other.inner) {
+            return false;
+        }
         self.inner.is_disjoint(&other.inner)
     }
 
     fn subset_of(&self, other: &Self) -> bool {
+        if Rc::ptr_eq(&self.inner, &other.inner) {
+            return true;
+        }
         self.inner.subset_of(&other.inner)
     }
 }
