@@ -17,8 +17,8 @@ use hasher::StableHasher;
 use itertools::Itertools as _;
 use names::{new_bucket, new_links, new_wide, FeatureNamespace, Names};
 use pubgrub::{
-    resolve, Dependencies, DependencyConstraints, DependencyProvider, PubGrubError,
-    SelectedDependencies, VersionSet,
+    resolve, Dependencies, DependencyConstraints, DependencyProvider, PackageResolutionStatistics,
+    PubGrubError, SelectedDependencies, VersionSet,
 };
 use rc_semver_pubgrub::RcSemverPubgrub;
 use ron::ser::PrettyConfig;
@@ -581,30 +581,39 @@ impl<'c> DependencyProvider for Index<'c> {
         })
     }
 
-    type Priority = Reverse<usize>;
+    type Priority = (u32, Reverse<usize>);
 
-    fn prioritize(&self, package: &Names<'c>, range: &RcSemverPubgrub) -> Self::Priority {
-        Reverse(match package {
-            Names::Links(_name) => {
-                // PubGrub automatically handles when any requirement has no overlap. So this is only deciding a importance of picking the version:
-                //
-                // - If it only matches one thing, then adding the decision with no additional dependencies makes no difference.
-                // - If it can match more than one thing, and it is entirely equivalent to picking the packages directly which would make more sense to the users.
-                //
-                // So only rubberstamp links attributes when all other decisions are made, by setting the priority as low as it will go.
-                usize::MAX
-            }
+    fn prioritize(
+        &self,
+        package: &Names<'c>,
+        range: &RcSemverPubgrub,
+        conflict_stats: &PackageResolutionStatistics,
+    ) -> Self::Priority {
+        (
+            conflict_stats.affected_count() + conflict_stats.culprit_count(),
+            Reverse(match package {
+                Names::Links(_name) => {
+                    // PubGrub automatically handles when any requirement has no overlap. So this is only deciding a importance of picking the version:
+                    //
+                    // - If it only matches one thing, then adding the decision with no additional dependencies makes no difference.
+                    // - If it can match more than one thing, and it is entirely equivalent to picking the packages directly which would make more sense to the users.
+                    //
+                    // So only rubberstamp links attributes when all other decisions are made, by setting the priority as low as it will go.
+                    usize::MAX
+                }
 
-            Names::Wide(_, req, _, _) => self.count_wide_matches(range, &package.crate_(), req),
-            Names::WideFeatures(_, req, _, _, _) | Names::WideDefaultFeatures(_, req, _, _) => self
-                .count_wide_matches(range, &package.crate_(), req)
-                .saturating_add(1),
+                Names::Wide(_, req, _, _) => self.count_wide_matches(range, &package.crate_(), req),
+                Names::WideFeatures(_, req, _, _, _) | Names::WideDefaultFeatures(_, req, _, _) => {
+                    self.count_wide_matches(range, &package.crate_(), req)
+                        .saturating_add(1)
+                }
 
-            Names::Bucket(_, _, _) => self.count_matches(range, &package.crate_()),
-            Names::BucketFeatures(_, _, _) | Names::BucketDefaultFeatures(_, _) => self
-                .count_matches(range, &package.crate_())
-                .saturating_add(1),
-        })
+                Names::Bucket(_, _, _) => self.count_matches(range, &package.crate_()),
+                Names::BucketFeatures(_, _, _) | Names::BucketDefaultFeatures(_, _) => self
+                    .count_matches(range, &package.crate_())
+                    .saturating_add(1),
+            }),
+        )
     }
 
     fn get_dependencies(

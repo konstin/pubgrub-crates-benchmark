@@ -1,6 +1,6 @@
-use std::{sync::mpsc, thread, time::Instant};
-
 use crossbeam::channel::unbounded;
+use std::time::Duration;
+use std::{sync::mpsc, thread, time::Instant};
 
 use benchmark_from_crates::{
     index_data, process_crate_version, read_index::read_index, Index, Mode, OutputSummary,
@@ -95,6 +95,7 @@ fn main() {
         let style = ProgressBar::new(to_prosses.len() as u64)
             .with_style(ProgressStyle::with_template(template).unwrap())
             .with_finish(ProgressFinish::AndLeave);
+        style.enable_steady_tick(Duration::new(1, 0));
         style.set_length(to_prosses.len() as _);
 
         let mut file_name = "out".to_string();
@@ -114,7 +115,13 @@ fn main() {
         let mut cargo_cpu_time = 0.0;
         let mut cargo_pub_lock_cpu_time = 0.0;
         let mut pub_cargo_lock_cpu_time = 0.0;
-        for row in out_rx {
+        for (idx, row) in out_rx.iter().enumerate() {
+            if to_prosses.len() < 100 {
+                style.println(format!(
+                    "Done {idx} after {:.2}s",
+                    start.elapsed().as_secs_f32()
+                ));
+            }
             style.inc(1);
             pub_cpu_time += row.time;
             cargo_cpu_time += row.cargo_time;
